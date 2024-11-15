@@ -1,4 +1,67 @@
-Example yml for your project to use these actions, please adapt to your own needs/setup
+# Deploy your Umbraco Cloud site using CI CD with this Action
+
+This action is currently our go to approach to deploy our clients websites to Umbraco Cloud. It is well tested and used extensively at Crumpled Dog.
+
+## Why
+
+While Umbraco does provide docs to set this up yourself it means having to have bash/powershell scripts in your website repo. Making it a nightmare to update should the implementation change on Umbraco's side and if you have many cloud sites. 
+
+This action serves as a single place for handling the calls to Umbraco CLoud.
+
+## How to use
+
+Below is all the YML you need to add to your existing pipeline. Here we have two jobs that will create the cloud source and push our zip to Umbraco Cloud.
+
+```yml
+  create-cloud-source:
+    name: Create source for Umbraco Cloud
+    needs: [setup,build-fe]
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.create-zip.outputs.artifact-name }}
+    steps:
+      - name: Create cloud source Zip
+        id: create-zip
+        uses: CrumpledDog/UmbracoCloudCICD/cloud-zip@main
+        with:
+          artifact-prefix: ${{ needs.setup.outputs.artifact-prefix }}
+          path-to-frontend: ${{ env.PATH_TO_FRONTEND }}
+          package-view-token: ${{ env.CRUMPLED_PACKAGE_VIEW_TOKEN }}
+          package-feed-url: ${{ env.CRUMPLED_PACKAGE_FEED_URL }}
+          slack_token: ${{ env.CRUMPLED_SLACK_OAUTH_HEALTHCHECKS }}
+
+  publish:
+    name: Publish to Umbraco Cloud
+    needs: [setup,create-cloud-source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.create-cloud-source.outputs.artifact-name }}
+      - id: deploy-to-cloud
+        uses: CrumpledDog/UmbracoCloudCICD/cloud-deploy@main
+        with:
+          umbraco-cloud-project-id: '${{ env.UMBRACO_CLOUD_PROJECT_ID }}'
+          umbraco-cloud-api-key: '${{ env.UMBRACO_CLOUD_API_KEY }}'
+          path-to-zip: '${{ needs.create-cloud-source.outputs.artifact-name }}.zip'
+          git-username: "Crumpled Bot"
+          git-email: "it@crumpled-dog.com"
+```
+
+## YAML Break down
+
+
+## Implemented features
+
+- All required API calls to Umbraco Cloud are managed by this action
+- Git repo mismatches are handled. If Umbraco Cloud has updated the repo on their side this action will automatically create a PR for you to review and merge.
+
+## Current issues
+
+Wasted build minutes - Currently there's no method to be told the build is completed on Umbraco's side. We have to wait for Umbraco to finish compiling the build to confirm the deployment is sucessful.
+
+Full example yml for your project to use these actions, please adapt to your own needs/setup
 
 ```yml
 name: Build and deploy to Umbraco Cloud
